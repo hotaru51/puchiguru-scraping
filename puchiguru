@@ -1,0 +1,40 @@
+#!/usr/bin/env ruby
+
+require 'nokogiri'
+require 'open-uri'
+
+SAVE_DIR_ROOT = __dir__ + '/images'
+DL_PAGE_ROOT = 'https://lovelive-puchiguru.jp/campaign/5c81dedf.html'.freeze
+
+root_doc = Nokogiri::HTML(open(DL_PAGE_ROOT))
+dl_pages = root_doc.xpath('//div[@class="scrollArea"]//a').map do |elm|
+  {
+    title: elm.text,
+    url: elm['href']
+  }
+end
+
+Dir.mkdir SAVE_DIR_ROOT unless Dir.exist? SAVE_DIR_ROOT
+
+dl_pages.each do |page|
+  puts %Q(Download from "#{page[:url]}" (#{page[:title]}))
+  work_dir = SAVE_DIR_ROOT + "/#{page[:title]}"
+  Dir.mkdir work_dir unless Dir.exist? work_dir
+
+  page_doc = Nokogiri::HTML(open(page[:url]))
+  img_url_arr = page_doc.xpath('//div[@class="scrollArea"]//img').map { |elm| elm[:src] }
+
+  threads = []
+  img_url_arr.each do |img_url|
+    save_file_path = work_dir + '/' + img_url.split('/').last
+    threads << Thread.fork(img_url, save_file_path) do |url, save_file|
+      open(url) do |img|
+        File.open(save_file, 'wb') do |file|
+          file.write(File.read(img))
+        end
+      end
+      puts "\tsave [#{save_file}]"
+    end
+  end
+  threads.each { |t| t.join }
+end
